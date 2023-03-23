@@ -10,9 +10,11 @@ from os.path import abspath
 from pyspark.sql.types import ArrayType, IntegerType, StructType, StructField, StringType, BooleanType, DateType
 import sys
 reload(sys)
+
 sys.setdefaultencoding('utf-8')
 
 # create a SparkSession
+
 spark = SparkSession \
         .builder \
         .appName('SCD Type 2') \
@@ -24,6 +26,7 @@ spark = SparkSession \
         
 spark.conf.set("spark.cleaner.referenceTracking.cleanCheckpoints", "true")
 
+print("CREATE sOURCE AND TARGET CONNECTION AND RETRIEVE DATA")
 
 df_src = spark.read.format("jdbc").option("url","jdbc:mysql://localhost:3306/SCD6").option("driver","com.mysql.jdbc.Driver").option("dbtable","customer_src").option("user","spark").option("password",'spark').load()
 
@@ -38,6 +41,9 @@ df_trgt=spark.sql("select * from customers_trgts")
 #history_data.show()
 
 
+########################################################################################
+# join data and identify actions
+########################################################################################
 joined_data=df_src.join(df_trgt,df_src.src_id==df_trgt.id,"outer")
 
 end_date = datetime.strptime('9999-12-31', '%Y-%m-%d').date()
@@ -63,6 +69,10 @@ df_update=joined_data.filter(joined_data.action == "U").select(joined_data.id,jo
 
 df_no_action=joined_data.filter(joined_data.action == "no_action").select(joined_data.id,joined_data.name,joined_data.current_address,joined_data.prev_address,joined_data.start_date,joined_data.end_date)
 
+###############################################################################################
+#
+# Untion all actions and make a set of all changes made
+###############################################################################################
 
 df_final_result=df_insert.unionAll(df_ext_insert).unionAll(df_ext_update).unionAll(df_update).unionAll(df_no_action)
 df_final_result.show()
@@ -73,6 +83,10 @@ window = Window.orderBy(F.col('id'))
 df_final_result = df_final_result.withColumn('key', F.row_number().over(window))
 
 df_final_result.show()
+
+###########################################################################
+# store change iun tempp table then mege it in the hive target table 
+###########################################################################
 
 
 
